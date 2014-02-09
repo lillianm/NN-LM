@@ -29,6 +29,8 @@ All Training resources and information are provided via a configuration file, su
 To run training on device gpu0, execute :
 sh scripts/run.sh nnlm_conf.ini gpu0  
 
+If you use Theano-0.6.0-rc3 , execute :
+sh scripts/run.sh gpu0 nnlm_conf.ini
 ## Testing 
 
 To test the file, you need to have a trained model directory somewhere. 
