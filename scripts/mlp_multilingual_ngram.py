@@ -47,7 +47,6 @@ UseDirect=0
 class ProjectionLayer_ngram(object):
     def __init__(self, rng, input, nhistory, feature,n_feat, n_in, n_out, N=4096, W=None,
                  sparse=None,activation=None):
-
         self.input = input
         if W is None:
             W_values = numpy.asarray(rng.uniform(
@@ -363,36 +362,53 @@ def convert_to_sparse_matrix_combine(Listx,N=4096,a=0,b=1e20):
     data_matrix = sp.csr_matrix( (data,(row,col)), shape=(len(x),N),dtype=theano.config.floatX )
     return data_matrix
 
-def convert_to_sparse_matrix_feature(Listx,N=4096,a=0,b=1e20):
+# def convert_to_sparse_matrix_feature(Listx,N=4096,a=0,b=1e20):
+#     col_len = len(Listx[0])
+#     row_len = len(Listx)
+#     print len(Listx)
+#     print len(Listx[0])
+#     data = numpy.zeros(shape=(len(Listx)*len(Listx[0]),4096*len(Listx)))
+#     print len(Listx)*len(Listx[0])
+#     n = 0
+#     c = 0
+#     if(len(Listx) >= 1):
+#         for x in Listx:
+#             c = c+1
+#             for i in x:
+#                 data[n][(c-1)*N+i] = 1
+#                 n = n+1
+#     else:
+#         for i in Listx:
+#             data[n][(c-1)*N+i] = 1
+#             n = n+1
+#     data_matrix = data
+#     return data_matrix
+def convert_to_sparse_matrix_feature(Listx, N=4096, a=0, b=1e20):
     data = []
     row = []
     col = []
     b = min(b,len(Listx[0]))
     # for each training example 
     for n in range(a,b):
-	c=0
-	# for each xk-1 xk-2 ... 
+        c=0
+        # for each xk-1 xk-2 ... 
         for x in Listx:
-	    # get current n's context
+        # get current n's context
             i = x[n]
-	    while( i >=N):
+            while( i >=N):
                 # to convert bigger into many smaller integers
                 f = i % 256 # 8 bit
                 data.append(1)
-		row.append(n)
-		col.append(c*N+f)
+                row.append(n)
+                col.append(c*N+f)
                 i = i >> 8 ; # shift by 8 bit
 
-            #if i >=N:
-	    #	print >> sys.stderr, "How is this possible!!!" 
-            #    i=0
             data.append(1)
             row.append(n)
             col.append(c*N + i )
-	    c = c+1
-    #print "ROW",row
-    #print "COL", col 
-    data_matrix = sp.csr_matrix( (data,(row,col)), shape=(len(x),N*c),dtype=theano.config.floatX )
+        c = c+1
+    print "ROW_size" , len(row) 
+    data_matrix = sp.csr_matrix( (data,(row,col)), shape=(len(row)-1,N*(c+1)),dtype=theano.config.floatX )
     return data_matrix
 
 def shared_data(data,type="float",sparse=False,borrow=False):
@@ -607,14 +623,15 @@ class TrainMLP(object):
         
         # construct the MLP class
         if ngram==2:
-	    if shared==False:
-                hWshared=hW; hBshared = hB;
-            self.classifier = MLP(rng=rng, input=self.x1, nhistory = [] ,feature=self.xfeat,n_features=n_feats,n_in=1, n_P=P, n_hidden=H, 
-				number_hidden_layer = number_hidden_layer, n_out=N, Voc=N,ngram=ngram,pW=pW,hW=hWshared,hB=hBshared,lW=lW,lB=lB,train_projection=train_projection,new_weights=new_weights)
+            if shared==False:
+                hWshared=hW;
+                hBshared = hB;
+            self.classifier = MLP(rng=rng, input=self.x1, nhistory = [] ,feature=self.xfeat,n_features=n_feats,n_in=1, n_P=P, n_hidden=H,
+            number_hidden_layer = number_hidden_layer, n_out=N, Voc=N,ngram=ngram,pW=pW,hW=hWshared,hB=hBshared,lW=lW,lB=lB,train_projection=train_projection,new_weights=new_weights)
         elif ngram==3:
-            # if this is not training, then we want hWshared,hBshared to be the loaded matrices 
-	    if shared==False:
-		hWshared=hW; hBshared = hB; 	  
+            # if this is not training, then we want hWshared,hBshared to be the loaded matrices
+            if shared==False:
+                hWshared=hW; hBshared = hB; 	  
             self.classifier = MLP(rng=rng, input=self.x1, nhistory = [self.x2] ,feature=self.xfeat,n_features=n_feats,n_in=1, n_P=P, n_hidden=H,
                                   number_hidden_layer = number_hidden_layer, n_out=N, Voc=N,ngram=ngram,pW=pW,hW=hWshared,hB=hBshared,lW=lW,lB=lB,shared=shared,train_projection=train_projection,new_weights=new_weights)
         elif ngram==4:
@@ -705,8 +722,8 @@ class TrainMLP(object):
         '''
         # specify how to update the parameters of the model as a dictionary
         self.tot_train_size = len(self.ntrain_set_y)
-        self.tot_valid_size = len(self.nvalid_set_y) 
-	self.train_set_x_sparse =  None 
+        self.tot_valid_size = len(self.nvalid_set_y)
+        self.train_set_x_sparse =  None 
 
     def projection_cost(self,synset,mlp2,rev=False):
 	cost = 0
@@ -762,19 +779,19 @@ class TrainMLP(object):
 	    return 1
         del self.train_set_x_sparse
         index = T.lscalar()    # index to a [mini]batch
-	self.counter = self.counter + 1 
+        self.counter = self.counter + 1 
         self.train_set_x_sparse=[]
         for train_set_xi in self.train_set_x_sparse_notshared:
-	    if not UseDirect:
-		if self.train_projection:	
-            	    tmp_matrix = train_set_xi[parts_index * copy_size:min(self.tot_train_size,(parts_index + 1) * copy_size)].todense()
-		    shared_x = theano.shared( tmp_matrix,borrow=False )
-		else:
+            if not UseDirect:
+                if self.train_projection:
+                    tmp_matrix = train_set_xi[parts_index * copy_size:min(self.tot_train_size,(parts_index + 1) * copy_size)].todense()
+                    shared_x = theano.shared( tmp_matrix,borrow=False )
+                else:
                     tmp_matrix = train_set_xi[parts_index * copy_size:min(self.tot_train_size,(parts_index + 1) * copy_size)]
                     shared_x = theano.shared( tmp_matrix,borrow=False )
-	    else:
+            else:
                 tmp_matrix = train_set_xi[parts_index * copy_size:min(self.tot_train_size,(parts_index + 1) * copy_size)]
-	        shared_x = shared_data(tmp_matrix,sparse=False,borrow=False) #theano.shared( tmp_matrix,sparse=False,borrow=False )
+                shared_x = shared_data(tmp_matrix,sparse=False,borrow=False) #theano.shared( tmp_matrix,sparse=False,borrow=False )
 
             self.train_set_x_sparse.append(shared_x)
 
@@ -793,7 +810,7 @@ class TrainMLP(object):
         if self.n_feats>0:
 	    # need to implement projection 
      	    tmp_matrix     = self.train_set_featx_sparse_notshared[parts_index * copy_size:min(self.tot_train_size,(parts_index + 1) * copy_size) ]
-	    tmp_matrix = tmp_matrix.todense()
+            tmp_matrix = tmp_matrix.todense()
             shared_featx   = theano.shared(tmp_matrix,borrow=False)
             Tgivens[self.xfeat] = shared_featx[index * batch_size:(index + 1) * batch_size]
 
@@ -825,23 +842,22 @@ def train_multi_mlp(NNLMdata_list,NNLMFeatData_list,OldParams_list,ngram_list,n_
     print >> sys.stderr, "building models..."
     Trainers=[]
     for i in range(number_of_languages):
-	if Trainers == [] :
+        if Trainers == []:
             Train1 = TrainMLP(NNLMdata_list[i],NNLMFeatData_list[i],OldParams_list[i],ngram_list[i],n_feats_list[i],n_unk_list[i],N_list[i],P,H,
                               number_hidden_layer,learning_rate, L1_reg, L2_reg, n_epochs,batch_size,adaptive_learning_rate,fparam_list[i],copy_size,spl_words_list[i],train_projection_list[i],new_weights_list[i])
-	else:
+        else:
             Train1 = TrainMLP(NNLMdata_list[i],NNLMFeatData_list[i],OldParams_list[i],ngram_list[i],n_feats_list[i],n_unk_list[i],N_list[i],P,H,
                               number_hidden_layer,learning_rate, L1_reg, L2_reg, n_epochs,batch_size,adaptive_learning_rate,fparam_list[i],copy_size,
                               spl_words_list[i],train_projection_list[i],new_weights_list[i],Trainers[0].classifier.hsharedW,Trainers[0].classifier.hsharedb,True)
-
         Trainers.append(Train1) 
 
     if synset!=0: #{}:
-	Trainers[0].define_cost(synset,Trainers[1],False)
+	   Trainers[0].define_cost(synset,Trainers[1],False)
 	
-	Trainers[1].define_cost(synset,Trainers[0],True)
+	   Trainers[1].define_cost(synset,Trainers[0],True)
     else:
     	for mlp in Trainers:
-	    mlp.define_cost(synset,mlp,False)
+	       mlp.define_cost(synset,mlp,False)
 
     print >> sys.stderr, '... training'
     tot_train_size = max(Trainers[i].tot_train_size for i in range(number_of_languages)) 
@@ -898,67 +914,64 @@ def train_multi_mlp(NNLMdata_list,NNLMFeatData_list,OldParams_list,ngram_list,n_
             n_train_batches = ( min(tot_train_size, (parts_index+ 1) * copy_size) - parts_index * copy_size  )/batch_size
             #for i in range(number_of_languages):
 	    #		Trainers[i].delete_shared()
-	    for i in range(number_of_languages):
+            for i in range(number_of_languages):
                 if Trainers[i].tot_train_size > ( parts_index * copy_size ) : # and ( epoch==1 or n_train_parts>1) :	
             	    Trainers[i].define_train_model(parts_index,copy_size,batch_size,n_train_parts)
-		else:
-		    repeater = repeater + 1 
-		    if Trainers[i].tot_train_size <  repeater * copy_size:
-			repeat_counter = repeat_counter + 1 
-			print >> sys.stderr, "repeater",repeater,"New learning rate for language",i,":",learning_rate/repeat_counter 
-	            	Trainers[i].define_updates(learning_rate/repeat_counter)
-			repeater = 0 
+                else:
+                    repeater = repeater + 1
+                    if Trainers[i].tot_train_size <  repeater * copy_size:
+                        repeat_counter = repeat_counter + 1
+                        print >> sys.stderr, "repeater",repeater,"New learning rate for language",i,":",learning_rate/repeat_counter
+                        Trainers[i].define_updates(learning_rate/repeat_counter)
+                        repeater = 0 
 
                     Trainers[i].define_train_model(repeater,copy_size,batch_size)
-		  
- 		
+
             print >> sys.stderr, "Training part:", parts_index+1 ,"of",n_train_parts
             print >> sys.stderr,"shuffling data... ",
-	    xn = numpy.arange(n_train_batches)
+            xn = numpy.arange(n_train_batches)
             numpy.random.shuffle(xn)
-	    print >> sys.stderr,"shuffled"
+            print >> sys.stderr,"shuffled"
+
+
             for minibatch_index in xn: #xrange(n_train_batches):
-		validation_frequency = min(n_train_batches, patience / 2)
+                validation_frequency = min(n_train_batches, patience / 2)
                 if minibatch_index * batch_size > tot_train_size:
                     break
 
                 for i in range(number_of_languages):
-	            if Trainers[i].tot_train_size > ( parts_index * copy_size  + minibatch_index * batch_size)  :
-                    	minibatch_avg_cost = Trainers[i].train_model(minibatch_index)
-                    	totcost+=minibatch_avg_cost
-		    elif Trainers[i].tot_train_size <= ( parts_index * copy_size ) and Trainers[i].tot_train_size >  repeater * copy_size + minibatch_index * batch_size :
+                    if Trainers[i].tot_train_size > ( parts_index * copy_size  + minibatch_index * batch_size):
                         minibatch_avg_cost = Trainers[i].train_model(minibatch_index)
                         totcost+=minibatch_avg_cost
-                
-                 
+                    elif Trainers[i].tot_train_size <= ( parts_index * copy_size ) and Trainers[i].tot_train_size >  repeater * copy_size + minibatch_index * batch_size :
+                        minibatch_avg_cost = Trainers[i].train_model(minibatch_index)
+                        totcost+=minibatch_avg_cost
                 iter = epoch * n_train_batches + minibatch_index
                 
                 if (iter + 1) % validation_frequency == 0:
                     # compute zero-one loss on validation set
-		    for l in range(number_of_languages):
-                    	validation_losses = [Trainers[l].validate_model(i) for i
+                    for l in range(number_of_languages):
+                        validation_losses = [Trainers[l].validate_model(i) for i
                         	                 in xrange(n_valid_batches)]
-                    	this_validation_loss = numpy.exp(numpy.mean(validation_losses)) 
+                        this_validation_loss = numpy.exp(numpy.mean(validation_losses)) 
                      
-                    	print >> sys.stderr, ('Language %i, minibatch %i/%i, validation error %f %%' %
+                        print >> sys.stderr, ('Language %i, minibatch %i/%i, validation error %f %%' %
                           	(l, minibatch_index + 1, n_train_batches,
                            	this_validation_loss))
-
                     # if we got the best validation score until now
-                  	if this_validation_loss < best_validation_loss[l]:
+                        if this_validation_loss < best_validation_loss[l]:
                     #improve patience if loss improvement is good enough
-			    done_looping= False;
+                            done_looping= False;
                             if this_validation_loss < best_validation_loss[l] *  \
-                                    improvement_threshold:
-                            	patience = max(patience, iter * patience_increase)
+                                improvement_threshold:
+                                patience = max(patience, iter * patience_increase)
 
                             best_validation_loss[l] = this_validation_loss
                             best_iter = iter
 
-			    test_score = this_validation_loss
-			
-			    params[l] = Trainers[l].final_weights()
-        		    write_all_params_matlab(fparam_list[l],params[l],number_hidden_layer)
+                            test_score = this_validation_loss
+                            params[l] = Trainers[l].final_weights()
+                            write_all_params_matlab(fparam_list[l],params[l],number_hidden_layer)
                             print >> sys.stderr, ((' Language %i, epoch %i, minibatch %i/%i, valid error of '
                              	'best model %f %%') %
                               	(l, epoch, minibatch_index + 1, n_train_batches,
@@ -966,10 +979,10 @@ def train_multi_mlp(NNLMdata_list,NNLMFeatData_list,OldParams_list,ngram_list,n_
 			
             gc.collect()
         if adaptive_learning_rate:
-	    if learning_rate > 0.004:
-	        learning_rate = float(learning_rate0)/(1 + float(iter*epsilon))
+            if learning_rate > 0.004:
+                learning_rate = float(learning_rate0)/(1 + float(iter*epsilon))
             else:
-		learning_rate = 0.005
+                learning_rate = 0.005
 	
         fl = '/tmp/stoppage'
         stop=0
@@ -980,8 +993,8 @@ def train_multi_mlp(NNLMdata_list,NNLMFeatData_list,OldParams_list,ngram_list,n_
             break
         if patience <= iter:
             done_looping = True
-            print >> sys.stderr,  "done looping","patience:",patience,"iter:",iter   
-	    break
+            print >> sys.stderr,  "done looping","patience:",patience,"iter:",iter
+            break
         print >> sys.stderr, "Total Cost in traning:", totcost
     
     end_time = time.clock()
@@ -1000,11 +1013,11 @@ def train_multi_mlp(NNLMdata_list,NNLMFeatData_list,OldParams_list,ngram_list,n_
 def test_mlp(testfile,testfeat,paramdir,outfile="", batch_size=50,write_arpa = False):
     copy_size = 20000
     if outfile == "":
-	outfile = testfile+".prob" 
+	   outfile = testfile+".prob" 
     ngram,n_feats,N,P,H,number_hidden_layer,WordID = read_machine(paramdir) 
     unkid = -1
     if "<UNK>" in WordID:
-	unkid = WordID["<UNK>"]
+	   unkid = WordID["<UNK>"]
     if write_arpa == False:
         TestData,N_input_layer,N_unk = CreateData(testfile,WordID,[],ngram,False,False) 
         NNLMdata = load_data(TestData,ngram,N,1e10,unkid)
@@ -1012,11 +1025,11 @@ def test_mlp(testfile,testfeat,paramdir,outfile="", batch_size=50,write_arpa = F
         NNLMdata = load_data_from_file(testfile,ngram,N,1e10,unkid)
 
     if n_feats > 0:
-	if testfeat=="None":
-	     print >> sys.stderr, "number of feats", n_feats," but feature file not provided. Exiting" 
-	     sys.exit(1)
-	unkid = -1 
-	NNLMFeatData = load_data_from_file(testfeat,ngram,N*1000,unkid) 
+        if testfeat=="None":
+            print >> sys.stderr, "number of feats", n_feats," but feature file not provided. Exiting"
+            sys.exit(1)
+        unkid = -1
+        NNLMFeatData = load_data_from_file(testfeat,ngram,N*1000,unkid)
         ntest_set_featx =  NNLMFeatData[0]
         ntest_set_featy =  NNLMFeatData[1]
         test_set_featx_sparse  = convert_to_sparse_matrix_feature(ntest_set_featx,n_feats).todense()
@@ -1032,7 +1045,7 @@ def test_mlp(testfile,testfeat,paramdir,outfile="", batch_size=50,write_arpa = F
     if not UseDirect:
     	x1 = T.matrix('x1') ; input_symbols.append(x1) # the data is presented as rasterized images
     	x2 = T.matrix('x2') ; input_symbols.append(x2)
-	x3 = T.matrix('x3') ; input_symbols.append(x3)
+        x3 = T.matrix('x3') ; input_symbols.append(x3)
     	x4 = T.matrix('x4') ; input_symbols.append(x4)
     	x5 = T.matrix('x5') ; input_symbols.append(x5)
     	x6 = T.matrix('x6') ; input_symbols.append(x6)
@@ -1055,21 +1068,21 @@ def test_mlp(testfile,testfeat,paramdir,outfile="", batch_size=50,write_arpa = F
 
     inputs = [];nhistory=[];
     if write_arpa == False:
-	inputs.append(y)
+        inputs.append(y)
     inputs.append(xfeat); inputs.append(x1)
     for i in range(1,ngram-1):
-	inputs.append(input_symbols[i])
-	nhistory.append(input_symbols[i])
+        inputs.append(input_symbols[i])
+        nhistory.append(input_symbols[i])
 
     classifier = MLP(rng=rng, input=x1, nhistory = nhistory,feature=xfeat,n_features=n_feats,n_in=1, n_P=P, n_hidden=H, 
                      number_hidden_layer = number_hidden_layer, n_out=N, Voc=N,ngram=ngram,pW=pW,hW=hW,hB=hB,lW=lW,lB=lB,)
  
     outputs = []
     if write_arpa == False:
-	outputs.append(classifier.get_p_y_given_x(y))
-	outputs.append(classifier.tot_ppl(y))
+        outputs.append(classifier.get_p_y_given_x(y))
+        outputs.append(classifier.tot_ppl(y))
     else:
-	outputs.append(classifier.get_p_y_given_x_all())
+        outputs.append(classifier.get_p_y_given_x_all())
     
     probs_model_full = theano.function(inputs= inputs, outputs= outputs, on_unused_input = 'warn') 
 
@@ -1085,39 +1098,37 @@ def test_mlp(testfile,testfeat,paramdir,outfile="", batch_size=50,write_arpa = F
         test_batches = t/copy_size + 1
     test_ppls = []
     for i in range(test_batches):
-	print >> sys.stderr,"running batch", i+1,"of ",test_batches 
-	x_sparse=[]
-	for set_x in ntest_set_x:
-	    if not UseDirect:
+        print >> sys.stderr,"running batch", i+1,"of ",test_batches
+        x_sparse=[]
+        for set_x in ntest_set_x:
+            if not UseDirect:
             	x = convert_to_sparse(set_x[i*copy_size: (i+1)*copy_size],N)
-	    else:
-		x = numpy.asarray(set_x[i*copy_size: (i+1)*copy_size],dtype=theano.config.floatX)
-
-  	    x_sparse.append(x)
-        y_test = ntest_set_y[i*copy_size : (i+1)*copy_size] 
-	if n_feats > 0:
- 	    x_feat = test_set_featx_sparse[i * copy_size:(i + 1) * copy_size]
-	else:
-	    if not UseDirect:
-	    	x_feat = [[],[]]
-	    else:
-		x_feat = []
+            else:
+                x = numpy.asarray(set_x[i*copy_size: (i+1)*copy_size],dtype=theano.config.floatX)
+            x_sparse.append(x)
+        y_test = ntest_set_y[i*copy_size : (i+1)*copy_size]
+        if n_feats > 0:
+            x_feat = test_set_featx_sparse[i * copy_size:(i + 1) * copy_size]
+        else:
+            if not UseDirect:
+                x_feat = [[],[]]
+            else:
+                x_feat = []
 	#print y_test, x_feat, x_sparse[0], x_sparse[1]
-	if write_arpa == False:
-      	    scores,loss=  probs_model_full(y_test,x_feat,*x_sparse) 
-	    
-	    test_ppls.append(loss)
-	
+        if write_arpa == False:
+            scores,loss=  probs_model_full(y_test,x_feat,*x_sparse)
+            test_ppls.append(loss)
+
             for yl,y in zip(scores,y_test):
-	       	if y==WordID['<UNK>']:
-		    print >> foutPF, 0
-		    print >> foutPFUnk, numpy.exp(yl)
-		    continue
-            	print >> foutPF, numpy.exp(yl)
-		print >> foutPFUnk , numpy.exp(yl)
-	else:
-	    scores = probs_model_full(x_feat,*x_sparse) 
- 	    for yl in scores:
+                if y==WordID['<UNK>']:
+                    print >> foutPF, 0
+                    print >> foutPFUnk, numpy.exp(yl)
+                    continue
+                print >> foutPF, numpy.exp(yl)
+                print >> foutPFUnk , numpy.exp(yl)
+        else:
+            scores = probs_model_full(x_feat,*x_sparse)
+            for yl in scores:
             	for xi in yl:
                     i=0;
                     for pi in xi:
